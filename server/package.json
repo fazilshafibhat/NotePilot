@@ -12,10 +12,13 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^4.0.121",
     "@mendable/firecrawl-js": "^4.54.0",
     "@pinecone-database/pinecone": "^8.2.0",
     "@prisma/adapter-pg": "^7.10.1",
     "@prisma/client": "^7.10.1",
+    "@tavily/core": "^0.7.14",
+    "ai": "^7.0.177",
     "better-auth": "^1.7.25",
     "cloudinary": "^2.11.0",
     "cors": "^2.8.6",
@@ -23,6 +26,7 @@
     "express": "^5.3.0",
     "firecrawl": "^4.54.0",
     "inngest": "^4.26.2",
+    "mem0ai": "^3.3.1",
     "multer": "^2.5.0",
     "openai": "^7.60.0",
     "pg": "^8.23.1",
