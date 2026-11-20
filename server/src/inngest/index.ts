@@ -1,5 +1,6 @@
 import { findChunksBySourceId } from "../repository/source-chunk.repository.js";
 import { findSourceById } from "../repository/source.repository.js";
+import { processArtifactById } from "../services/artifact.services.js";
 import { summarizeConversationById } from "../services/conversation-memory.services.js";
 import { chunkSourceContent, embedAndIndexSource, extractSourceContent, markSourceFailed, markSourceProcessing } from "../services/source-processing.services.js";
 import { inngest } from "./client.js";
@@ -53,6 +54,21 @@ export const processSource = inngest.createFunction(
   },
 );
 
+export const generateArtifact = inngest.createFunction(
+    {
+        id: "generate-artifact",
+        retries: 2,
+        triggers: [{ event: "artifact/generate" }],
+    },
+    async ({ event, step }) => {
+        const { artifactId } = event.data;
+
+        await step.run("generate", () => processArtifactById(artifactId));
+
+        return { artifactId, status: "READY" };
+    },
+);
+
 
 export const summarizeConversation = inngest.createFunction(
     {
@@ -70,4 +86,4 @@ export const summarizeConversation = inngest.createFunction(
         return { conversationId, status: "SUMMARIZED" };
     },
 );
-export const functions = [processSource]
+export const functions = [processSource, summarizeConversation];
