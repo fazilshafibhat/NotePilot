@@ -18,6 +18,8 @@ app.use(
     cors({
         origin: clientUrl,
         credentials: true,
+        // Lets the browser read the id of a newly created chat conversation
+        exposedHeaders: ["X-Conversation-Id"],
     }),
 );
 
