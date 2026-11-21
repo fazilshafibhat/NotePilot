@@ -105,5 +105,6 @@ export async function chat(req: Request, res: Response) {
         messages: body.messages as unknown as UIMessage[],
         model: body.model,
         webSearch: body.webSearch,
+        sourceIds: body.sourceIds,
     });
 }

@@ -106,13 +106,20 @@ export async function searchUserMemories(userId: string, query: string) {
         return [];
     }
 
-    const results = await getMem0Client().search(query, {
-        filters: { user_id: userId },
-        topK: 8,
-        threshold: 0.1,
-    });
+    // Memories are optional context: if Mem0 is unreachable (network/DNS
+    // hiccup, outage), answer without them instead of failing the chat.
+    try {
+        const results = await getMem0Client().search(query, {
+            filters: { user_id: userId },
+            topK: 8,
+            threshold: 0.1,
+        });
 
-    return results.results.map(mapMemory);
+        return results.results.map(mapMemory);
+    } catch (error) {
+        console.error("Mem0 search failed; continuing without memories:", error);
+        return [];
+    }
 }
 
 /**
@@ -141,12 +148,33 @@ export async function addUserMemory(
         },
     );
 
-    const first = created[0];
-    if (!first) {
+    // Mem0's API answers `{ status, results: [{ id, data: { memory } }] }`;
+    // older SDKs returned the array directly. Accept both.
+    const response = created as unknown as
+        | Array<{ id: string; memory?: string; data?: { memory?: string } }>
+        | {
+              results?: Array<{
+                  id: string;
+                  memory?: string;
+                  data?: { memory?: string };
+              }>;
+          };
+    const results = Array.isArray(response)
+        ? response
+        : (response?.results ?? []);
+    const first = results[0];
+    if (!first?.id) {
         throw new Error("Mem0 did not return a created memory");
     }
 
-    return mapMemory(first);
+    const now = new Date().toISOString();
+    return mapMemory({
+        id: first.id,
+        memory: first.memory ?? first.data?.memory ?? input.memory,
+        createdAt: now,
+        updatedAt: now,
+        metadata: input.metadata ?? null,
+    });
 }
 
 /**
@@ -191,8 +219,13 @@ export async function updateUserMemory(
         text: input.memory,
     });
 
-    const first = updated[0];
-    if (!first) {
+    // Mem0's API returns the updated memory object; older SDKs returned an
+    // array. Accept both.
+    const response = updated as unknown as
+        | Parameters<typeof mapMemory>[0]
+        | Parameters<typeof mapMemory>[0][];
+    const first = Array.isArray(response) ? response[0] : response;
+    if (!first?.id) {
         throw new Error("Mem0 did not return an updated memory");
     }
 

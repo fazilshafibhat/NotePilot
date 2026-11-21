@@ -1,71 +1,109 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { BookOpen, MessageSquare, Sparkles } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { ModeToggle } from "@/components/ui/mode-toggle";
-import Image from "next/image";
+import { Logo, notifyError } from "@/components/app/common";
+import { FullPageSpinner } from "@/components/app/auth-gate";
+import { signIn, useSession } from "@/lib/auth-client";
+
+const FEATURES = [
+  {
+    icon: BookOpen,
+    title: "Upload sources",
+    text: "PDFs, websites, YouTube, and notes in one place",
+  },
+  {
+    icon: MessageSquare,
+    title: "Chat with context",
+    text: "Ask questions grounded in your materials",
+  },
+  {
+    icon: Sparkles,
+    title: "Learn faster",
+    text: "Flashcards, quizzes, mind maps, and summaries",
+  },
+];
 
 export default function Home() {
+  const { data: session, isPending } = useSession();
+  const router = useRouter();
+  const [signingIn, setSigningIn] = useState(false);
+
+  useEffect(() => {
+    if (session) router.replace("/dashboard");
+  }, [session, router]);
+
+  async function handleSignIn() {
+    setSigningIn(true);
+    const { error } = await signIn.social({
+      provider: "google",
+      callbackURL: `${window.location.origin}/dashboard`,
+    });
+    if (error) {
+      setSigningIn(false);
+      notifyError(new Error(error.message ?? "Sign-in failed"), "Sign-in failed");
+    }
+  }
+
+  if (isPending || session) return <FullPageSpinner />;
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <ModeToggle />
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <div className="relative flex min-h-svh flex-col overflow-hidden">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 -top-40 h-[480px] bg-[radial-gradient(ellipse_at_top,var(--color-primary)_0%,transparent_60%)] opacity-15"
+      />
+      <header className="relative mx-auto flex w-full max-w-5xl items-center justify-between px-6 py-5">
+        <Logo />
+        <ModeToggle />
+      </header>
+
+      <main className="relative mx-auto flex w-full max-w-5xl flex-1 flex-col justify-center gap-12 px-6 pb-20">
+        <div className="max-w-2xl space-y-5">
+          <p className="text-sm font-medium text-primary">
+            Your AI study notebook
           </p>
+          <h1 className="font-heading text-4xl font-semibold tracking-tight sm:text-5xl">
+            Learn from everything you read.
+          </h1>
+          <p className="text-muted-foreground">
+            Organize sources, chat with your materials, and generate learning
+            tools — all in one workspace.
+          </p>
+          <Button size="lg" onClick={handleSignIn} disabled={signingIn}>
+            {signingIn ? <Spinner /> : <GoogleIcon />}
+            Continue with Google
+          </Button>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        <div className="grid gap-4 sm:grid-cols-3">
+          {FEATURES.map(({ icon: Icon, title, text }) => (
+            <div
+              key={title}
+              className="rounded-2xl border bg-card/60 p-5 backdrop-blur"
+            >
+              <Icon className="mb-3 size-5 text-primary" />
+              <div className="font-semibold">{title}</div>
+              <p className="mt-1 text-sm text-muted-foreground">{text}</p>
+            </div>
+          ))}
         </div>
       </main>
     </div>
+  );
+}
+
+function GoogleIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden className="size-4">
+      <path
+        fill="currentColor"
+        d="M21.35 11.1h-9.17v2.73h6.51c-.33 3.81-3.5 5.44-6.5 5.44C8.36 19.27 5 16.25 5 12c0-4.1 3.2-7.27 7.2-7.27 3.09 0 4.9 1.97 4.9 1.97L19 4.72S16.56 2 12.1 2C6.42 2 2.03 6.8 2.03 12c0 5.05 4.13 10 10.22 10 5.35 0 9.25-3.67 9.25-9.09 0-1.15-.15-1.81-.15-1.81Z"
+      />
+    </svg>
   );
 }

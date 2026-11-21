@@ -1,7 +1,8 @@
 import type { Request, Response } from "express";
-import { deleteUserMemory, listUserMemories } from "../lib/mem0.js";
+import { listUserMemories } from "../lib/mem0.js";
 import {
     createMemoryForUser,
+    deleteMemoryForUser,
     updateMemoryForUser,
 } from "../services/memory.services.js";
 import { ValidationError } from "../types/app-error.js";
@@ -75,6 +76,6 @@ export async function updateMemory(req: Request, res: Response) {
 
 export async function deleteMemory(req: Request, res: Response) {
     const { memoryId } = parseMemoryId(req.params);
-    await deleteUserMemory(memoryId);
+    await deleteMemoryForUser(req.session.user.id, memoryId);
     res.status(204).send();
 }

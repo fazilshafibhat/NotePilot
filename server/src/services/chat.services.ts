@@ -49,6 +49,7 @@ import {
 } from "../utils/chat-message.js";
 import { getWorkspaceByIdForUser } from "./workspace.services.js";
 import { addMemoriesFromMessages, searchUserMemories } from "../lib/mem0.js";
+import { findSourcesByWorkspaceId } from "../repository/source.repository.js";
 
 /**
  * Lists all conversations in a workspace for the sidebar/history UI.
@@ -209,6 +210,7 @@ export async function streamWorkspaceChat(
         messages: UIMessage[];
         model?: string;
         webSearch?: boolean;
+        sourceIds?: string[];
     },
 ) {
     const workspace = await getWorkspaceByIdForUser(workspaceId, userId);
@@ -235,8 +237,15 @@ export async function streamWorkspaceChat(
         content: userText,
     });
 
+    // Explicit focus wins; otherwise focus on any source the question names.
+    const focusSourceIds = input.sourceIds?.length
+        ? input.sourceIds
+        : await findSourcesNamedInText(workspaceId, userText);
+
     const [retrievedChunks, userMemories] = await Promise.all([
-        retrieveWorkspaceContext(workspaceId, userText),
+        retrieveWorkspaceContext(workspaceId, userText, {
+            sourceIds: focusSourceIds,
+        }),
         searchUserMemories(userId, userText),
     ]);
 
@@ -318,7 +327,20 @@ export async function streamWorkspaceChat(
                       excerpt: result.content.slice(0, 280),
                   }))
                 : [];
-            const allCitations = [...citations, ...webCitations];
+            // Memories are numbered [M1], [M2] in the prompt; keep them (in
+            // that order) only when the reply actually cites one.
+            const memoryCitations = /\[M\d+\]/.test(assistantText)
+                ? userMemories.map((memory) => ({
+                      sourceType: "MEMORY" as const,
+                      sourceTitle: "Saved memory",
+                      excerpt: memory.memory,
+                  }))
+                : [];
+            const allCitations = [
+                ...citations,
+                ...webCitations,
+                ...memoryCitations,
+            ];
 
             await createMessageRecord({
                 conversationId: conversation.id,
@@ -369,4 +391,34 @@ export async function streamWorkspaceChat(
             "X-Conversation-Id": conversation.id,
         },
     });
+}
+
+/**
+ * Returns ids of READY sources whose title the user mentions, so a question
+ * like `Tell me about "4"` searches that source instead of matching the
+ * title's meaning across the whole workspace (a short title like "4" has none).
+ *
+ * A title counts as mentioned when it appears in quotes, or, for titles of at
+ * least 4 characters, as a whole phrase anywhere in the text.
+ */
+async function findSourcesNamedInText(workspaceId: string, text: string) {
+    const sources = await findSourcesByWorkspaceId(workspaceId, {
+        status: "READY",
+    });
+    const lower = text.toLowerCase();
+    const escape = (value: string) =>
+        value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+    return sources
+        .filter((source) => {
+            const title = source.title.trim().toLowerCase();
+            if (!title) return false;
+            const quoted = new RegExp(`["“'‘]${escape(title)}["”'’]`);
+            if (quoted.test(lower)) return true;
+            return (
+                title.length >= 4 &&
+                new RegExp(`(^|\\W)${escape(title)}($|\\W)`).test(lower)
+            );
+        })
+        .map((source) => source.id);
 }

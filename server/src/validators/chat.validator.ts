@@ -9,6 +9,8 @@ export const conversationIdParamSchema = workspaceIdParamSchema.extend({
 export const chatBodySchema = z.object({
     conversationId: z.string().trim().min(1).optional(),
     messages: z.array(z.record(z.string(), z.unknown())).min(1),
+    /** Limits retrieval to these sources (e.g. "chat about this source"). */
+    sourceIds: z.array(z.string().trim().min(1)).max(20).optional(),
     model: z.enum(CHAT_MODELS).optional(),
     webSearch: z.boolean().optional(),
 });

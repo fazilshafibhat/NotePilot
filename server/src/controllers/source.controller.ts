@@ -7,6 +7,7 @@ import {
     importWebsiteSchema,
     importYoutubeSchema,
     listSourcesQuerySchema,
+    reprocessSourcesSchema,
     sourceIdParamSchema,
 } from "../validators/source.validator.js";
 import { workspaceIdParamSchema } from "../validators/workspace.validator.js";
@@ -18,6 +19,7 @@ import {
     importWebsiteSource,
     importYoutubeSource,
     listSourcesForWorkspace,
+    reprocessSourcesForWorkspace,
     uploadPdfSource,
 } from "../services/source.services.js";
 
@@ -180,4 +182,22 @@ export async function importYoutube(req: Request, res: Response) {
         input,
     );
     res.status(201).json(source);
+}
+export async function reprocessSources(req: Request, res: Response) {
+    const { workspaceId } = parseWorkspaceId(req.params);
+    const parsed = reprocessSourcesSchema.safeParse(req.body ?? {});
+
+    if (!parsed.success) {
+        throw new ValidationError(
+            "Validation failed",
+            getZodFieldErrors(parsed.error),
+        );
+    }
+
+    const sources = await reprocessSourcesForWorkspace(
+        workspaceId,
+        req.session.user.id,
+        parsed.data.sourceIds,
+    );
+    res.json(sources);
 }

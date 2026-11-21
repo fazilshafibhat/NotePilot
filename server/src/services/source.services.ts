@@ -1,3 +1,4 @@
+import type { Prisma } from "../generated/prisma/client.js";
 import { uploadPdfToCloudinary } from "../lib/cloudinary.js";
 import { scrapeWebsite } from "../lib/firecrawl.js";
 import { extractPdfFromBuffer } from "../lib/pdf.js";
@@ -8,6 +9,7 @@ import {
     deleteSourceRecord,
     findSourceByIdAndWorkspaceId,
     findSourcesByWorkspaceId,
+    updateSourceRecord,
     type SourceRecord,
 } from "../repository/source.repository.js";
 import { NotFoundError } from "../types/app-error.js";
@@ -85,13 +87,13 @@ export async function createTextOrMarkdownSource(
 ) {
     await assertWorkspaceAccess(workspaceId, userId);
 
-    // return createAndProcessSource({
-    //     workspaceId,
-    //     type: input.type,
-    //     title: input.title,
-    //     content: input.content,
-    //     status: "PENDING",
-    // });
+    return createAndProcessSource({
+        workspaceId,
+        type: input.type,
+        title: input.title,
+        content: input.content,
+        status: "PENDING",
+    });
 }
 
 
@@ -179,4 +181,75 @@ export async function importYoutubeSource(
             videoId: transcript.videoId,
         },
     });
+}
+/** Sources still PENDING/PROCESSING after this long are treated as stuck. */
+const STUCK_AFTER_MS = 5 * 60 * 1000;
+
+/**
+ * Re-queues sources for background processing.
+ *
+ * Used to recover sources whose job failed or was lost (for example when the
+ * Inngest dev server restarted mid-run). Chunking replaces a source's old
+ * chunks, so re-running is safe.
+ *
+ * @param workspaceId - Workspace the sources belong to
+ * @param userId - Authenticated user's id
+ * @param sourceIds - Specific sources to retry; when omitted, retries every
+ *   FAILED source and every PENDING/PROCESSING source that looks stuck
+ * @returns The sources that were re-queued, now marked PENDING
+ * @throws {NotFoundError} When a given source id is not in this workspace
+ */
+export async function reprocessSourcesForWorkspace(
+    workspaceId: string,
+    userId: string,
+    sourceIds?: string[],
+) {
+    await assertWorkspaceAccess(workspaceId, userId);
+
+    let targets: SourceRecord[];
+    if (sourceIds?.length) {
+        targets = [];
+        for (const sourceId of sourceIds) {
+            const source = await findSourceByIdAndWorkspaceId(
+                sourceId,
+                workspaceId,
+            );
+            if (!source) {
+                throw new NotFoundError("Source not found");
+            }
+            targets.push(source);
+        }
+    } else {
+        const cutoff = Date.now() - STUCK_AFTER_MS;
+        targets = (await findSourcesByWorkspaceId(workspaceId)).filter(
+            (source) =>
+                source.status === "FAILED" ||
+                (source.status !== "READY" &&
+                    source.updatedAt.getTime() < cutoff),
+        );
+    }
+
+    const requeued: SourceRecord[] = [];
+    for (const source of targets) {
+        const metadata =
+            source.metadata &&
+            typeof source.metadata === "object" &&
+            !Array.isArray(source.metadata)
+                ? { ...(source.metadata as Record<string, unknown>) }
+                : {};
+        delete metadata.processingError;
+
+        requeued.push(
+            await updateSourceRecord(source.id, {
+                status: "PENDING",
+                metadata: metadata as Prisma.InputJsonValue,
+            }),
+        );
+        await enqueueSourceProcessing({
+            sourceId: source.id,
+            workspaceId: source.workspaceId,
+        });
+    }
+
+    return requeued;
 }
